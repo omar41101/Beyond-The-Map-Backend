@@ -33,8 +33,13 @@ connectDB();
 
 // CORS must be first to handle preflight requests
 app.use(cors({
-    origin: [process.env.FRONTEND_URL || 'http://localhost:5173','https://beyond-the-map-nine.vercel.app/'],
-    credentials: true
+    origin: [
+        process.env.FRONTEND_URL || 'http://localhost:5173',
+        'https://beyond-the-map-nine.vercel.app'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Body parsing middleware
