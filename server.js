@@ -76,6 +76,20 @@ app.use('/api/tourist', touristRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/products', publicProductRoutes);
 
+// Root route for Vercel deployment
+app.get('/', (req, res) => {
+    res.json({ 
+        message: 'Beyond The Map API Server',
+        status: 'running',
+        version: '1.0.0',
+        endpoints: {
+            health: '/api/health',
+            docs: '/api-docs',
+            api: '/api/*'
+        }
+    });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Backend is running' });
