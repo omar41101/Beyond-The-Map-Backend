@@ -1,0 +1,301 @@
+import Tour from '../models/Tour.js';
+
+// @route   GET /api/tours/stats
+// @desc    Get tour statistics by status
+// @access  Public
+export const getTourStats = async (req, res) => {
+    try {
+        const stats = await Tour.aggregate([
+            { $match: { isActive: true } },
+            {
+                $group: {
+                    _id: '$tourStatus',
+                    count: { $sum: 1 },
+                    avgPrice: { $avg: '$price' },
+                    avgRating: { $avg: '$rating' }
+                }
+            }
+        ]);
+        
+        const totalTours = await Tour.countDocuments({ isActive: true });
+        
+        res.json({
+            success: true,
+            totalTours,
+            stats
+        });
+    } catch (error) {
+        console.error('Get tour stats error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching tour statistics',
+            error: error.message
+        });
+    }
+};
+
+// @route   GET /api/tours/status/:status
+// @desc    Get tours by status
+// @access  Public
+export const getToursByStatus = async (req, res) => {
+    try {
+        const { status } = req.params;
+        
+        if (!['upcoming', 'ongoing', 'completed', 'cancelled'].includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid status'
+            });
+        }
+        
+        const tours = await Tour.find({ 
+            tourStatus: status,
+            isActive: true 
+        })
+        .populate('agency', 'fullName email')
+        .sort('-createdAt');
+        
+        // Update status for each tour before sending
+        const updatedTours = tours.map(tour => {
+            tour.updateStatus();
+            return tour;
+        });
+        
+        res.json({
+            success: true,
+            count: updatedTours.length,
+            tours: updatedTours
+        });
+    } catch (error) {
+        console.error('Get tours by status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching tours',
+            error: error.message
+        });
+    }
+};
+
+// @route   GET /api/tours
+// @desc    Get all active tours
+// @access  Public
+export const getTours = async (req, res) => {
+    try {
+        const { category, location, minPrice, maxPrice, search } = req.query;
+        
+        let query = { isActive: true };
+        
+        if (category) query.category = category;
+        if (location) query.location = { $regex: location, $options: 'i' };
+        if (minPrice || maxPrice) {
+            query.price = {};
+            if (minPrice) query.price.$gte = parseFloat(minPrice);
+            if (maxPrice) query.price.$lte = parseFloat(maxPrice);
+        }
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+        }
+        
+        const tours = await Tour.find(query)
+            .populate('agency', 'fullName email')
+            .sort('-createdAt');
+        
+        // Update status for each tour and include time calculations
+        const toursWithStatus = tours.map(tour => {
+            tour.updateStatus();
+            return tour;
+        });
+        
+        res.json({
+            success: true,
+            count: toursWithStatus.length,
+            tours: toursWithStatus
+        });
+    } catch (error) {
+        console.error('Get tours error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching tours',
+            error: error.message
+        });
+    }
+};
+
+// @route   GET /api/tours/:id
+// @desc    Get single tour
+// @access  Public
+export const getTour = async (req, res) => {
+    try {
+        const tour = await Tour.findById(req.params.id)
+            .populate('agency', 'fullName email phone profileImage');
+        
+        if (!tour) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tour not found'
+            });
+        }
+        
+        // Update status before sending
+        tour.updateStatus();
+        await tour.save();
+        
+        res.json({
+            success: true,
+            tour,
+            timeUntilStart: tour.timeUntilStart,
+            timeUntilEnd: tour.timeUntilEnd,
+            currentStatus: tour.tourStatus
+        });
+    } catch (error) {
+        console.error('Get tour error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching tour',
+            error: error.message
+        });
+    }
+};
+
+// @route   POST /api/tours
+// @desc    Create tour (Agency only)
+// @access  Private
+export const createTour = async (req, res) => {
+    try {
+        if (req.user.role !== 'agency' && req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Only agencies can create tours'
+            });
+        }
+        
+        const tourData = {
+            ...req.body,
+            agency: req.user.id
+        };
+        
+        const tour = await Tour.create(tourData);
+        
+        res.status(201).json({
+            success: true,
+            message: 'Tour created successfully',
+            tour
+        });
+    } catch (error) {
+        console.error('Create tour error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error creating tour',
+            error: error.message
+        });
+    }
+};
+
+// @route   PUT /api/tours/:id
+// @desc    Update tour
+// @access  Private (Agency owner or Admin)
+export const updateTour = async (req, res) => {
+    try {
+        const tour = await Tour.findById(req.params.id);
+        
+        if (!tour) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tour not found'
+            });
+        }
+        
+        // Check ownership
+        if (tour.agency.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to update this tour'
+            });
+        }
+        
+        const updatedTour = await Tour.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true, runValidators: true }
+        );
+        
+        res.json({
+            success: true,
+            message: 'Tour updated successfully',
+            tour: updatedTour
+        });
+    } catch (error) {
+        console.error('Update tour error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating tour',
+            error: error.message
+        });
+    }
+};
+
+// @route   DELETE /api/tours/:id
+// @desc    Delete tour (soft delete)
+// @access  Private (Agency owner or Admin)
+export const deleteTour = async (req, res) => {
+    try {
+        const tour = await Tour.findById(req.params.id);
+        
+        if (!tour) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tour not found'
+            });
+        }
+        
+        if (tour.agency.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to delete this tour'
+            });
+        }
+        
+        tour.isActive = false;
+        await tour.save();
+        
+        res.json({
+            success: true,
+            message: 'Tour deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete tour error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting tour',
+            error: error.message
+        });
+    }
+};
+
+// @route   GET /api/tours/agency/:agencyId
+// @desc    Get tours by agency
+// @access  Public
+export const getToursByAgency = async (req, res) => {
+    try {
+        const tours = await Tour.find({ 
+            agency: req.params.agencyId,
+            isActive: true 
+        }).sort('-createdAt');
+        
+        res.json({
+            success: true,
+            count: tours.length,
+            tours
+        });
+    } catch (error) {
+        console.error('Get agency tours error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching agency tours',
+            error: error.message
+        });
+    }
+};
