@@ -10,6 +10,7 @@ import { scheduleBackups } from './utils/backup.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
 import { sanitizeMongo, sanitizeXSS, validateInput } from './middleware/inputSanitization.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
+
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import tourRoutes from './routes/tours.js';
@@ -31,40 +32,59 @@ const PORT = process.env.PORT || 5000;
 // Connect to MongoDB
 connectDB();
 
-// CORS must be first to handle preflight requests
-app.use(cors({
-    origin: [
-        process.env.FRONTEND_URL || 'http://localhost:5173',
-        'https://beyond-the-map-nine.vercel.app'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// FIXED CORS — THIS WORKS PERFECTLY ON VERCEL
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow non-browser tools (Postman, mobile apps, etc.)
+      if (!origin) return callback(null, true);
 
-// Body parsing middleware
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'https://beyond-the-map-nine.vercel.app',
+        'https://beyond-the-map.vercel.app', // if you have another deployment
+        process.env.FRONTEND_URL,           // for future custom domains
+      ].filter(Boolean); // removes undefined values
+
+      // Allow all Vercel preview & production deployments temporarily (very handy)
+      if (origin.includes('vercel.app') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true, // important if you use cookies or Authorization header
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  })
+);
+
+// Trust Vercel's proxy (critical on Vercel or you’ll get 403 on preflight)
+app.set('trust proxy', 1);
+
+// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// Security Middleware (after CORS and body parsing)
+// Security middleware
 app.use(securityHeaders);
 app.use(apiLimiter);
 app.use(sanitizeMongo);
 app.use(sanitizeXSS);
 app.use(validateInput);
 
-// Swagger documentation
+// Swagger
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-    explorer: true,
-    customCss: '.swagger-ui .topbar { display: none }',
-    customSiteTitle: 'Beyond The Map API Docs'
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Beyond The Map API Docs'
 }));
 
-// Swagger JSON
 app.get('/api-docs.json', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.send(swaggerSpec);
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
 });
 
 // Routes
@@ -81,52 +101,43 @@ app.use('/api/tourist', touristRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/products', publicProductRoutes);
 
-// Root route for Vercel deployment
+// Vercel root
 app.get('/', (req, res) => {
-    res.json({ 
-        message: 'Beyond The Map API Server',
-        status: 'running',
-        version: '1.0.0',
-        endpoints: {
-            health: '/api/health',
-            docs: '/api-docs',
-            api: '/api/*'
-        }
-    });
+  res.json({
+    message: 'Beyond The Map API Server',
+    status: 'running',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      docs: '/api-docs',
+      api: '/api/*'
+    }
+  });
 });
 
-// Health check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', message: 'Backend is running' });
+  res.json({ status: 'OK', message: 'Backend is healthy' });
 });
 
-// Error handling middleware
+// Global error handler
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ 
-        success: false, 
-        message: 'Something went wrong!',
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
+  console.error('Error:', err);
+  res.status(500).json({
+    success: false,
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
 });
 
-// Only start server if not in test mode
-if (process.env.NODE_ENV !== 'test') {
-    app.listen(PORT, () => {
-        console.log(`🚀 Server running on port ${PORT}`);
-        console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
-        console.log(`🔒 Security: Rate limiting, XSS protection, MongoDB injection protection enabled`);
-        
-        // Initialize scheduled jobs for automatic status updates
-        initializeScheduledJobs();
-        
-        // Initialize automatic backups in production
-        if (process.env.NODE_ENV === 'production') {
-            scheduleBackups();
-            console.log(`💾 Automatic database backups enabled (daily at 2 AM)`);
-        }
-    });
+// Start server (Vercel ignores this block, but it's needed locally)
+if (process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`API Docs: http://localhost:${PORT}/api-docs`);
+    initializeScheduledJobs();
+    if (process.env.NODE_ENV === 'production') scheduleBackups();
+  });
 }
 
 export default app;
