@@ -43,7 +43,8 @@ app.use(
         'http://localhost:3000',
         'http://localhost:5173',
         'https://beyond-the-map-nine.vercel.app',
-        'https://beyond-the-map.vercel.app', // if you have another deployment
+        'https://beyond-the-map.vercel.app',
+        'https://beyond-the-map-git-main-omars-projects-811abb3e.vercel.app',// if you have another deployment
         process.env.FRONTEND_URL,           // for future custom domains
       ].filter(Boolean); // removes undefined values
 
