@@ -27,31 +27,38 @@ import publicProductRoutes from './routes/publicProducts.js';
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Connect to DB
+// Connect to MongoDB
 connectDB();
 
 // FIXED CORS — THIS WORKS PERFECTLY ON VERCEL
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.log('🌐 CORS Check - Origin:', origin);
+      
       // Allow non-browser tools (Postman, mobile apps, etc.)
       if (!origin) return callback(null, true);
 
       const allowedOrigins = [
         'http://localhost:3000',
+        'http://localhost:9999',
         'http://localhost:5173',
-        'https://beyond-the-map-three.vercel.app',
         'https://beyond-the-map-nine.vercel.app',
         'https://beyond-the-map.vercel.app', // if you have another deployment
         process.env.FRONTEND_URL,           // for future custom domains
       ].filter(Boolean); // removes undefined values
 
+      console.log('✅ Allowed origins:', allowedOrigins);
+
       // Allow all Vercel preview & production deployments temporarily (very handy)
       if (origin.includes('vercel.app') || allowedOrigins.includes(origin)) {
+        console.log('✅ CORS ALLOWED for:', origin);
         return callback(null, true);
       }
 
+      console.log('❌ CORS BLOCKED for:', origin);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true, // important if you use cookies or Authorization header
@@ -60,15 +67,15 @@ app.use(
   })
 );
 
-// Very important on Vercel (fixes preflight 403s)
+// Trust Vercel's proxy (critical on Vercel or you’ll get 403 on preflight)
 app.set('trust proxy', 1);
 
-// Body parsers
+// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// Security
+// Security middleware
 app.use(securityHeaders);
 app.use(apiLimiter);
 app.use(sanitizeMongo);
@@ -81,6 +88,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
   customSiteTitle: 'Beyond The Map API Docs'
 }));
+
 app.get('/api-docs.json', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.send(swaggerSpec);
@@ -100,17 +108,22 @@ app.use('/api/tourist', touristRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/products', publicProductRoutes);
 
-// Root & health
+// Vercel root
 app.get('/', (req, res) => {
   res.json({
     message: 'Beyond The Map API Server',
     status: 'running',
     version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      docs: '/api-docs',
+      api: '/api/*'
+    }
   });
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', message: 'Backend is healthy' });
 });
 
 // Global error handler
@@ -118,17 +131,17 @@ app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(500).json({
     success: false,
-    message: 'Server error',
-    ...(process.env.NODE_ENV === 'development' && { error: err.message })
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
-// Local dev server only
-if (!process.env.VERCEL) {
-  const PORT = process.env.PORT || 5000;
+// Start server (Vercel ignores this block, but it's needed locally)
+if (process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
   app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`Docs: http://localhost:${PORT}/api-docs`);
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`API Docs: http://localhost:${PORT}/api-docs`);
     initializeScheduledJobs();
     if (process.env.NODE_ENV === 'production') scheduleBackups();
   });
