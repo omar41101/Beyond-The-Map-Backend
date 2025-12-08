@@ -31,6 +31,7 @@ const PORT = process.env.PORT || 5000;
 
 // Connect to MongoDB
 connectDB();
+// Removed Vercel serverless handler export. Only Express app is exported below.
 
 // FIXED CORS — THIS WORKS PERFECTLY ON VERCEL
 app.use(
