@@ -1,5 +1,5 @@
 import express from 'express';
-import { updateProfile, linkHederaAccount } from '../controllers/userController.js';
+import { updateProfile, changePassword, linkHederaAccount } from '../controllers/userController.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -59,6 +59,40 @@ router.use(protect);
  *         description: User not found
  */
 router.put('/profile', updateProfile);
+
+/**
+ * @swagger
+ * /api/user/change-password:
+ *   put:
+ *     summary: Change user password
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - currentPassword
+ *               - newPassword
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *                 example: OldPass@123
+ *               newPassword:
+ *                 type: string
+ *                 example: NewPass@123
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       400:
+ *         description: Invalid current password or new password too short
+ *       401:
+ *         description: Not authorized
+ */
+router.put('/change-password', changePassword);
 
 /**
  * @swagger

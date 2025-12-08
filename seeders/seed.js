@@ -338,6 +338,7 @@ const seedDatabase = async () => {
                 category: 'adventure',
                 images: ['https://example.com/sahara1.jpg', 'https://example.com/sahara2.jpg'],
                 agency: agency2._id,
+                hederaTourId: '0.0.5001',
                 startDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
                 endDate: new Date(Date.now() + 13 * 24 * 60 * 60 * 1000),
                 availableDates: [

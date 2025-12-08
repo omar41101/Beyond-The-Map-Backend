@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import bcrypt from 'bcryptjs';
 
 // @route   PUT /api/user/profile
 // @desc    Update user profile
@@ -32,6 +33,65 @@ export const updateProfile = async (req, res) => {
         res.status(500).json({ 
             success: false, 
             message: 'Error updating profile',
+            error: error.message 
+        });
+    }
+};
+
+// @route   PUT /api/user/change-password
+// @desc    Change user password
+// @access  Private
+export const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Current password and new password are required' 
+            });
+        }
+
+        if (newPassword.length < 8) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'New password must be at least 8 characters' 
+            });
+        }
+
+        const user = await User.findById(req.user.id).select('+password');
+        
+        if (!user) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'User not found' 
+            });
+        }
+
+        // Verify current password
+        const isMatch = await user.comparePassword(currentPassword);
+        
+        if (!isMatch) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Current password is incorrect' 
+            });
+        }
+
+        // Hash and save new password
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(newPassword, salt);
+        await user.save();
+
+        res.json({
+            success: true,
+            message: 'Password changed successfully'
+        });
+    } catch (error) {
+        console.error('Change password error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error changing password',
             error: error.message 
         });
     }

@@ -52,7 +52,10 @@ export const getToursByStatus = async (req, res) => {
             tourStatus: status,
             isActive: true 
         })
-        .populate('agency', 'fullName email')
+        .populate({
+            path: 'agency',
+            select: 'companyName contactInfo description rating'
+        })
         .sort('-createdAt');
         
         // Update status for each tour before sending
@@ -100,7 +103,10 @@ export const getTours = async (req, res) => {
         }
         
         const tours = await Tour.find(query)
-            .populate('agency', 'fullName email')
+            .populate({
+                path: 'agency',
+                select: 'companyName contactInfo description rating'
+            })
             .sort('-createdAt');
         
         // Update status for each tour and include time calculations
@@ -129,8 +135,50 @@ export const getTours = async (req, res) => {
 // @access  Public
 export const getTour = async (req, res) => {
     try {
-        const tour = await Tour.findById(req.params.id)
-            .populate('agency', 'fullName email phone profileImage');
+        const tourId = req.params.id;
+        
+        // Check if this is a blockchain tour (numeric ID or non-ObjectId format)
+        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(tourId);
+        
+        if (!isValidObjectId) {
+            // This is likely a blockchain tour ID
+            // Try to find tour by hederaTourId or return blockchain tour info
+            const blockchainTour = await Tour.findOne({ hederaTourId: tourId })
+                .populate({
+                    path: 'agency',
+                    select: 'companyName contactInfo description rating'
+                });
+            
+            if (blockchainTour) {
+                blockchainTour.updateStatus();
+                await blockchainTour.save();
+                
+                return res.json({
+                    success: true,
+                    tour: blockchainTour,
+                    timeUntilStart: blockchainTour.timeUntilStart,
+                    timeUntilEnd: blockchainTour.timeUntilEnd,
+                    currentStatus: blockchainTour.tourStatus,
+                    isBlockchainTour: true,
+                    requiresWallet: true
+                });
+            }
+            
+            // If not found in database, indicate it's a blockchain-only tour
+            return res.status(200).json({
+                success: true,
+                isBlockchainOnly: true,
+                requiresWallet: true,
+                message: 'This tour exists only on the blockchain. Please connect your wallet to view details.'
+            });
+        }
+        
+        // Regular MongoDB tour lookup
+        const tour = await Tour.findById(tourId)
+            .populate({
+                path: 'agency',
+                select: 'companyName contactInfo description rating'
+            });
         
         if (!tour) {
             return res.status(404).json({
@@ -148,7 +196,8 @@ export const getTour = async (req, res) => {
             tour,
             timeUntilStart: tour.timeUntilStart,
             timeUntilEnd: tour.timeUntilEnd,
-            currentStatus: tour.tourStatus
+            currentStatus: tour.tourStatus,
+            isBlockchainTour: !!tour.hederaTourId
         });
     } catch (error) {
         console.error('Get tour error:', error);
@@ -242,31 +291,48 @@ export const updateTour = async (req, res) => {
 // @access  Private (Agency owner or Admin)
 export const deleteTour = async (req, res) => {
     try {
+        console.log('🗑️ Delete tour request:', {
+            tourId: req.params.id,
+            userId: req.user.id,
+            userRole: req.user.role
+        });
+
         const tour = await Tour.findById(req.params.id);
         
         if (!tour) {
+            console.log('❌ Tour not found:', req.params.id);
             return res.status(404).json({
                 success: false,
                 message: 'Tour not found'
             });
         }
+
+        console.log('📋 Tour details:', {
+            tourId: tour._id,
+            tourAgency: tour.agency,
+            requestUserId: req.user.id,
+            match: tour.agency.toString() === req.user.id
+        });
         
         if (tour.agency.toString() !== req.user.id && req.user.role !== 'admin') {
+            console.log('❌ Authorization failed');
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to delete this tour'
             });
         }
         
-        tour.isActive = false;
-        await tour.save();
+        // Actually delete the tour instead of just marking as inactive
+        await Tour.findByIdAndDelete(req.params.id);
+        
+        console.log('✅ Tour deleted successfully:', req.params.id);
         
         res.json({
             success: true,
             message: 'Tour deleted successfully'
         });
     } catch (error) {
-        console.error('Delete tour error:', error);
+        console.error('❌ Delete tour error:', error);
         res.status(500).json({
             success: false,
             message: 'Error deleting tour',

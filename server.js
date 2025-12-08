@@ -36,22 +36,30 @@ connectDB();
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.log('🌐 CORS Check - Origin:', origin);
+      
       // Allow non-browser tools (Postman, mobile apps, etc.)
       if (!origin) return callback(null, true);
 
       const allowedOrigins = [
         'http://localhost:3000',
+        'http://localhost:9999',
         'http://localhost:5173',
+        'https://beyond-the-map-three.vercel.app',
         'https://beyond-the-map-nine.vercel.app',
         'https://beyond-the-map.vercel.app', // if you have another deployment
         process.env.FRONTEND_URL,           // for future custom domains
       ].filter(Boolean); // removes undefined values
 
+      console.log('✅ Allowed origins:', allowedOrigins);
+
       // Allow all Vercel preview & production deployments temporarily (very handy)
       if (origin.includes('vercel.app') || allowedOrigins.includes(origin)) {
+        console.log('✅ CORS ALLOWED for:', origin);
         return callback(null, true);
       }
 
+      console.log('❌ CORS BLOCKED for:', origin);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true, // important if you use cookies or Authorization header

@@ -102,6 +102,10 @@ export const login = async (req, res) => {
         const token = generateToken(user._id);
         const userProfile = await user.getPublicProfile();
 
+        console.log(`✅ User logged in successfully: ${email}`);
+        console.log(`📋 User role: ${user.role}`);
+        console.log(`📦 User profile:`, JSON.stringify(userProfile, null, 2));
+
         res.json({
             success: true,
             message: 'Login successful',
