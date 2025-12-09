@@ -47,10 +47,12 @@ app.use(
         'http://localhost:9999',
         'http://localhost:5173',
         'https://beyond-the-map-nine.vercel.app',
-        'https://beyond-the-map.vercel.app', // if you have another deployment
-        'https://beyond-the-map-three.vercel.app', // ADDED: your frontend domain
-        process.env.FRONTEND_URL,           // for future custom domains
-      ].filter(Boolean); // removes undefined values
+        'https://beyond-the-map.vercel.app',
+        'https://beyond-the-map-three.vercel.app',
+        'https://beyond-the-map-backend.onrender.com',
+        'https://beyond-the-map-backend-1.onrender.com',
+        process.env.FRONTEND_URL,
+      ].filter(Boolean);
 
       console.log('✅ Allowed origins:', allowedOrigins);
 

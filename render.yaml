@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: beyond-the-map-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 9999
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        value: https://beyond-the-map-three.vercel.app
+      - key: ENCRYPTION_KEY
+        sync: false
